@@ -9,7 +9,7 @@ extends RigidBody3D
 class_name FPVDrone
 
 signal crashed()
-signal gate_passed(gate_index: int)
+signal destroyed(kills: int)
 signal armed_changed(armed: bool)
 
 enum FlightMode { ACRO, ANGLE }
@@ -31,6 +31,14 @@ var yaw_input: float = 0.0 # -1..1, +1 = stick kanan = yaw kanan
 
 var armed: bool = false
 var is_crashed: bool = false
+## True setelah ledakan kamikaze — drone hancur, auto-restart oleh Main.
+## Berbeda dari is_crashed (crash biasa tanpa RPG, tunggu tombol RESET).
+var is_destroyed: bool = false
+## RPG warhead terpasang (drone = senjata kamikaze). Tanpa RPG, crash
+## hanya crash biasa; dengan RPG, kontak mob / crash keras = detonasi.
+var rpg_mounted: bool = false
+var _rpg_tube: MeshInstance3D = null
+var _war_map: Node = null
 var battery_charge: float = 1.0 # 0..1
 var battery_voltage: float = 16.8
 var battery_current: float = 0.0
@@ -84,10 +92,46 @@ func _ready() -> void:
 	for child in get_children():
 		if child is MeshInstance3D and child.name.begins_with("Prop"):
 			_props.append(child)
+	# WarMap (tetangga di Main) untuk ledakan kamikaze.
+	var parent: Node = get_parent()
+	if parent != null:
+		_war_map = parent.get_node_or_null("WarMap")
+	# Warhead RPG visual: tabung + hulu ledak di bawah kamera, terlihat
+	# di bawah frame FPV saat terpasang. Dibuat via kode (tanpa edit
+	# Drone.tscn). Menunjuk ke depan (-Z), sejajar badan drone.
+	_rpg_tube = MeshInstance3D.new()
+	_rpg_tube.name = "RPGTube"
+	var tube_mesh: CylinderMesh = CylinderMesh.new()
+	tube_mesh.top_radius = 0.045
+	tube_mesh.bottom_radius = 0.045
+	tube_mesh.height = 0.7
+	_rpg_tube.mesh = tube_mesh
+	var tube_mat: StandardMaterial3D = StandardMaterial3D.new()
+	tube_mat.albedo_color = Color(0.15, 0.25, 0.12, 1)
+	_rpg_tube.set_surface_override_material(0, tube_mat)
+	_rpg_tube.position = Vector3(0, -0.05, -0.30)
+	_rpg_tube.rotation.x = PI / 2.0
+	_rpg_tube.visible = false
+	add_child(_rpg_tube)
+	# Hulu ledak (ujung oranye).
+	var warhead: MeshInstance3D = MeshInstance3D.new()
+	warhead.name = "RPGWarhead"
+	var wh_mesh: CylinderMesh = CylinderMesh.new()
+	wh_mesh.top_radius = 0.055
+	wh_mesh.bottom_radius = 0.045
+	wh_mesh.height = 0.18
+	warhead.mesh = wh_mesh
+	var wh_mat: StandardMaterial3D = StandardMaterial3D.new()
+	wh_mat.albedo_color = Color(0.9, 0.35, 0.05, 1)
+	warhead.set_surface_override_material(0, wh_mat)
+	warhead.position = Vector3(0, -0.05, -0.70)
+	warhead.rotation.x = PI / 2.0
+	warhead.visible = false
+	add_child(warhead)
 	body_entered.connect(_on_body_entered)
 
 func set_armed(value: bool) -> void:
-	if is_crashed and value:
+	if (is_crashed or is_destroyed) and value:
 		return
 	if armed == value:
 		return
@@ -110,8 +154,53 @@ func toggle_mode() -> void:
 	pid_y.reset()
 	pid_z.reset()
 
+## Pasang/lepas warhead RPG (tombol RPG di HUD). Tanpa RPG, drone
+## hanya drone biasa; dengan RPG, drone = senjata kamikaze.
+func set_rpg_mounted(value: bool) -> void:
+	if is_destroyed:
+		return
+	rpg_mounted = value
+	if _rpg_tube != null:
+		_rpg_tube.visible = value
+	for child in get_children():
+		if child is MeshInstance3D and child.name == "RPGWarhead":
+			child.visible = value
+
+## Detonasi kamikaze: ledakan radius di posisi drone, mob dalam radius
+## hancur (kill counter), drone hancur -> Main auto-restart setelah 2 dtk.
+func detonate() -> void:
+	if is_destroyed:
+		return
+	var kills: int = 0
+	if _war_map != null and _war_map.has_method("explode_at"):
+		kills = int(_war_map.call("explode_at", global_position, 12.0))
+	# Matikan drone: motor 0, beku, sembunyi (ledakan menutupi).
+	is_destroyed = true
+	is_crashed = false
+	armed = false
+	for i in range(4):
+		motor_cmd[i] = 0.0
+		motor_filtered[i] = 0.0
+		rpm[i] = 0.0
+	throttle_input = 0.0
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	freeze = true
+	visible = false
+	armed_changed.emit(false)
+	destroyed.emit(kills)
+
 func reset_to_start() -> void:
 	is_crashed = false
+	is_destroyed = false
+	rpg_mounted = false
+	if _rpg_tube != null:
+		_rpg_tube.visible = false
+	for child in get_children():
+		if child is MeshInstance3D and child.name == "RPGWarhead":
+			child.visible = false
+	freeze = false
+	visible = true
 	battery_charge = 1.0
 	battery_voltage = 16.8
 	pid_x.reset()
@@ -169,13 +258,34 @@ func set_stick_input(throttle: float, pitch: float, roll: float, yaw: float) -> 
 func clear_joystick_active() -> void:
 	_joystick_active = false
 
-func _on_body_entered(_body: Node) -> void:
-	# Kontak keras = crash. Kecepatan saat kontak menentukan.
+func _on_body_entered(body: Node) -> void:
+	if is_destroyed or is_crashed:
+		return
+	# Kontak dengan mob + RPG terpasang = detonasi kamikaze (kecepatan
+	# berapa pun, termasuk sentuhan pelan). Tanpa RPG: mob hanya
+	# rintangan fisik (pentalan); crash hanya jika impact keras.
+	if body is Mob and armed and rpg_mounted:
+		detonate()
+		return
+	# Kontak keras = crash / detonasi.
 	var spd: float = linear_velocity.length()
-	if armed and spd > CRASH_SPEED_THRESHOLD and not is_crashed:
+	if armed and spd > CRASH_SPEED_THRESHOLD:
+		_on_hard_impact(spd)
+
+## Impact keras: dengan RPG -> warhead meledak; tanpa RPG -> crash biasa.
+## Pendaratan lembut (speed di bawah threshold) bukan apa-apa di kedua
+## kasus — drone hanya mendarat.
+func _on_hard_impact(spd: float) -> void:
+	if is_destroyed or is_crashed:
+		return
+	if rpg_mounted:
+		detonate()
+	else:
 		_do_crash(spd)
 
 func _do_crash(spd: float) -> void:
+	if is_destroyed:
+		return
 	is_crashed = true
 	crash_speed = spd
 	armed = false
@@ -306,11 +416,11 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 	# --- Deteksi crash via kontak (cadangan selain body_entered) ---
 	var contacts: int = state.get_contact_count()
-	if contacts > 0 and armed and not is_crashed:
+	if contacts > 0 and armed and not is_crashed and not is_destroyed:
 		if speed_ms > CRASH_SPEED_THRESHOLD:
 			# Hanya crash jika kontak baru (hindari crash berulang saat mendarat pelan).
 			if not _prev_contact:
-				_do_crash(speed_ms)
+				_on_hard_impact(speed_ms)
 	_prev_contact = contacts > 0
 
 ## Mode ANGLE: hitung desired omega dari error sudut.

@@ -128,14 +128,24 @@ turun hingga 22% dan ditambah guncangan torque sinus kecil.
 Ground effect: dalam 0.5 m di atas tanah, lift ekstra hingga +18%,
 memudar linear ke 0 di 0.5 m.
 
-## 6. Crash & Reset
+## 6. Crash, Kamikaze & Reset
 
 Crash jika kontak dengan kecepatan > 6 m/s (via `body_entered` +
 cadangan `get_contact_count()` di `_integrate_forces`).
-Saat crash: disarm, motor 0, status CRASHED. Tombol RESET respawn di pad.
-**Reset = instan tegak**: rotasi dipaksa `Basis.IDENTITY`, kecepatan
-linier + angular nol, throttle nol, posisi kembali ke spawn. Tidak ada
-animasi auto-rotate — reset instan adalah standar sim FPV.
+
+- **Crash biasa (tanpa RPG):** disarm, motor 0, status CRASHED.
+  Tombol RESET = restart run penuh (lihat §10).
+- **Kamikaze (RPG terpasang):** kontak dengan prajurit/tank (kecepatan
+  berapa pun) ATAU crash keras → warhead meledak: ledakan radius 12 m
+  menghancurkan semua mob di radius (kill counter +1 per mob), drone
+  hancur (status DESTROYED), lalu auto-restart setelah 2 detik.
+  Pendaratan lembut dengan RPG terpasang = hanya mendarat, tidak meledak.
+- **Reset = instan tegak**: rotasi dipaksa `Basis.IDENTITY`, kecepatan
+  linier + angular nol, throttle nol, posisi kembali ke spawn, RPG lepas.
+  Tidak ada animasi auto-rotate — reset instan adalah standar sim FPV.
+- Mob (prajurit/tank) NON-SHOOTING: tidak menembak, tidak memberi
+  damage. Satu-satunya cara mereka hancur adalah ledakan kamikaze.
+  Tidak ada sistem HP drone — kehancuran hanya via kamikaze / crash.
 
 ## 7. Kamera
 
@@ -147,16 +157,40 @@ Catatan: Godot `fov` adalah vertikal — jangan salin angka diagonal
 hardware 150° mentah-mentah (itu ≈ 75–90° vertikal di layar 16:9).
 FOV 115 lama membuat kecepatan sulit dinilai.
 
-## 8. Map & Lighting (BUILD 8)
+## 8. Map & Lighting (BUILD 10 — War Mode)
 
-- Map **800×800 m** (dari 400×400): ground + collision diperluas, dinding
-  pembatas tinggi 8 m di ±398, 26 pohon, 10 bangunan, 9 bukit, 4 ramp,
-  2 kolam, 1 bando, **12 gate** (8 lama + 4 di lingkar luar), 12 awan.
-  Tetap low-poly, material flat, tanpa SSAO — hemat di mobile.
-- Lighting: matahari DirectionalLight + shadow (bias 0.02, shadow map
-  2048 via `rendering/lights_and_shadows/directional_shadow/size`),
-  Environment tone mapping **ACES** (exposure 1.05), ambient dari langit
-  (energy 0.45) agar bayangan tidak hitam pekat, fog 0.0025 untuk depth cue.
+- Map **INFINITE prosedural** (menggantikan 800×800 statis + race gates):
+  chunk 100×100 m, 5×5 chunk di sekitar drone, chunk jauh di-despawn.
+  RNG seeded per chunk (seed dunia + koordinat chunk) — chunk yang sama
+  kembali identik saat dikunjungi lagi. Restart = seed baru.
+- Per chunk: tanah lumpur (3 varian warna), 1–2 parit (strip gelap +
+  karung pasir), 2–4 kawah, 50% reruntuhan (dinding collision ON),
+  1–3 pohon gundul, 2–3 batu, prajurit (60% chunk, 1–3, patroli) +
+  tank (25% chunk, 0–1, diam + turret scan). Mesh/material dipakai
+  bersama antar chunk — hemat draw call + memori. Pohon/batu/karung
+  pasir visual saja (tanpa collision); collision hanya tanah + reruntuhan
+  + mob.
+- Lighting: matahari DirectionalLight + shadow (shadow map 2048 via
+  `rendering/lights_and_shadows/directional_shadow/size`), Environment
+  tone mapping **ACES** (exposure 1.0), ambient dari langit (energy 0.5),
+  langit overcast kelabu + fog 0.004 untuk atmosfer perang.
+  Tetap low-poly, tanpa SSAO — hemat di mobile.
+
+## 10. War Mode — Kamikaze (BUILD 10)
+
+- **RPG toggle (tombol RPG):** pasang/lepas warhead pada drone (tabung +
+  hulu ledak oranye, terlihat di bawah frame FPV saat terpasang).
+  Tidak ada proyektil RPG, tidak ada tombol FIRE — drone ITU SENJATAnya.
+- **Detonasi:** drone + RPG + kontak mob (prajurit/tank) → ledakan
+  radius 12 m (bola api + asap + cahaya + serpihan + bunyi ledakan
+  prosedural). Semua mob dalam radius hancur: prajurit hilang, tank
+  jadi bangkai hitam sampai chunk di-despawn. Kill counter di HUD +1
+  per mob. Drone hancur → pesan "KAMIKAZE! +N KILLS" 2 detik →
+  auto-restart (spawn, seed dunia baru, kills 0, RPG lepas).
+- **Crash keras + RPG** → warhead ikut meledak (ledakan + kill radius +
+  auto-restart). **Crash tanpa RPG** → CRASHED biasa, tunggu RESET.
+- **RESET manual** = restart run penuh yang sama (drone → spawn,
+  dunia re-roll, HUD reset).
 
 ## 9. Batasan model
 

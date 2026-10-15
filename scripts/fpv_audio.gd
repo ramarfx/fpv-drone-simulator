@@ -15,6 +15,8 @@ var _lp_wind: float = 0.0
 var _beep_time: float = 0.0
 var _thud_time: float = 0.0
 var _thud_level: float = 0.0
+var _boom_time: float = 0.0
+var _boom_level: float = 0.0
 var _drone: FPVDrone
 
 func _ready() -> void:
@@ -48,6 +50,8 @@ func _process(_delta: float) -> void:
 		_beep_time -= get_process_delta_time()
 	if _thud_time > 0.0:
 		_thud_time -= get_process_delta_time()
+	if _boom_time > 0.0:
+		_boom_time -= get_process_delta_time()
 	var armed: bool = _drone != null and _drone.armed
 	var throttle: float = 0.0
 	var speed: float = 0.0
@@ -105,6 +109,11 @@ func _process(_delta: float) -> void:
 			# Lowpass kasar dengan decay.
 			var decay: float = _thud_time / 0.35
 			sample += n * _thud_level * decay * 0.9
+		# --- Ledakan kamikaze: noise burst berat, decay panjang ---
+		if _boom_time > 0.0:
+			var n2: float = randf_range(-1.0, 1.0)
+			var decay2: float = _boom_time / 0.9
+			sample += n2 * _boom_level * decay2 * 1.2
 		# Soft clip.
 		sample = clampf(sample, -0.95, 0.95)
 		_playback.push_frame(Vector2(sample, sample))
@@ -115,6 +124,10 @@ func play_gate_beep() -> void:
 func play_crash_thud(intensity: float = 1.0) -> void:
 	_thud_time = 0.35
 	_thud_level = clampf(intensity, 0.2, 1.0)
+
+func play_explosion() -> void:
+	_boom_time = 0.9
+	_boom_level = 1.0
 
 func _on_drone_crashed() -> void:
 	play_crash_thud(1.0)

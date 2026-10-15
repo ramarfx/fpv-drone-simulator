@@ -1,6 +1,7 @@
 extends CanvasLayer
 ## HUD / OSD FPV: baterai, timer, kecepatan, ketinggian, mode, ARM,
-## throttle bar, horizon mini, crosshair, gate/lap, tombol.
+## throttle bar, horizon mini, crosshair, kill counter, tombol
+## (ARM / ACRO-ANGLE / RESET / RPG / CAM +/− / PAUSE / MUTE).
 
 @export var drone_path: NodePath
 @export var audio_path: NodePath
@@ -9,21 +10,23 @@ extends CanvasLayer
 var _drone: FPVDrone
 var _audio: Node
 var _camera: Camera3D
+var _war_map: Node
 var _left: VirtualJoystick
 var _right: VirtualJoystick
 var _elapsed: float = 0.0
-var _lap_start: float = 0.0
-var _gate_count: int = 0
-var _last_lap: float = 0.0
-var _best_lap: float = 0.0
 var _paused: bool = false
+## True selama 2 detik jendela kematian (pesan DESTROYED tampil, jangan
+## ditimpa _process). Dibersihkan reset_run().
+var _show_destroyed: bool = false
+var _rpg_btn_state: bool = false
 
 ## Tag build yang tampil di layar — naikkan tiap build agar jelas APK mana
 ## yang sedang jalan di HP (mencegah "kok tidak ada perubahan" karena APK lama).
-const BUILD_TAG: String = "BUILD 9"
+const BUILD_TAG: String = "BUILD 10"
 
 # Referensi UI (diisi di _ready via get_node).
 var _btn_pause: Button
+var _btn_rpg: Button
 var _lbl_debug: Label
 var _lbl_batt: Label
 var _lbl_timer: Label
@@ -31,7 +34,7 @@ var _lbl_speed: Label
 var _lbl_alt: Label
 var _lbl_mode: Label
 var _lbl_arm: Label
-var _lbl_gate: Label
+var _lbl_kills: Label
 var _lbl_hint: Label
 var _lbl_thr: Label
 var _bar_throttle: ProgressBar
@@ -53,7 +56,10 @@ func _ready() -> void:
 	_lbl_alt = get_node_or_null("TopBar/Altitude") as Label
 	_lbl_mode = get_node_or_null("TopBar/Mode") as Label
 	_lbl_arm = get_node_or_null("TopBar/ArmState") as Label
-	_lbl_gate = get_node_or_null("TopBar/Gates") as Label
+	_lbl_kills = get_node_or_null("TopBar/Kills") as Label
+	var parent: Node = get_parent()
+	if parent != null:
+		_war_map = parent.get_node_or_null("WarMap")
 	_lbl_hint = get_node_or_null("Hint") as Label
 	_lbl_thr = get_node_or_null("ThrottlePct") as Label
 	_lbl_debug = get_node_or_null("DebugLabel") as Label
@@ -75,6 +81,9 @@ func _ready() -> void:
 	var btn_reset: Button = get_node_or_null("Buttons/ResetButton") as Button
 	if btn_reset != null:
 		btn_reset.pressed.connect(_on_reset_pressed)
+	_btn_rpg = get_node_or_null("Buttons/RPGButton") as Button
+	if _btn_rpg != null:
+		_btn_rpg.pressed.connect(_on_rpg_pressed)
 	var btn_cam_up: Button = get_node_or_null("Buttons/CamUp") as Button
 	if btn_cam_up != null:
 		btn_cam_up.pressed.connect(_on_cam_up)
@@ -88,8 +97,8 @@ func _ready() -> void:
 	if btn_mute != null:
 		btn_mute.pressed.connect(_on_mute_pressed)
 	if _drone != null:
-		_drone.gate_passed.connect(_on_gate_passed)
 		_drone.crashed.connect(_on_drone_crashed)
+		_drone.destroyed.connect(_on_drone_destroyed)
 
 func _input(event: InputEvent) -> void:
 	# Back Android / ESC = pause toggle. Ada di HUD (bukan main.gd) karena
@@ -150,7 +159,10 @@ func _process(delta: float) -> void:
 	if _lbl_mode != null:
 		_lbl_mode.text = "ACRO" if _drone.flight_mode == FPVDrone.FlightMode.ACRO else "ANGLE"
 	if _lbl_arm != null:
-		if _drone.is_crashed:
+		if _drone.is_destroyed:
+			_lbl_arm.text = "DESTROYED"
+			_lbl_arm.modulate = Color(1, 0.2, 0.2)
+		elif _drone.is_crashed:
 			_lbl_arm.text = "CRASHED — RESET"
 			_lbl_arm.modulate = Color(1, 0.2, 0.2)
 		elif _drone.armed:
@@ -159,15 +171,21 @@ func _process(delta: float) -> void:
 		else:
 			_lbl_arm.text = "DISARMED"
 			_lbl_arm.modulate = Color(1, 1, 1)
-	if _lbl_gate != null:
-		_lbl_gate.text = "GATE %d/12  LAP %s" % [_gate_count, _fmt_time(_last_lap) if _last_lap > 0.0 else "--:--"]
-	if _lbl_hint != null:
+	if _lbl_kills != null and _war_map != null:
+		_lbl_kills.text = "KILLS %d" % int(_war_map.get("kills"))
+	# Tombol RPG: sinkronkan teks dengan state drone (toggle + reset).
+	if _btn_rpg != null and _drone != null:
+		if _drone.rpg_mounted != _rpg_btn_state:
+			_rpg_btn_state = _drone.rpg_mounted
+			_btn_rpg.text = "RPG: ON" if _rpg_btn_state else "RPG: OFF"
+			_btn_rpg.modulate = Color(1, 0.4, 0.2) if _rpg_btn_state else Color(1, 1, 1)
+	if _lbl_hint != null and not _show_destroyed:
 		if get_tree().paused:
 			_lbl_hint.text = "PAUSED — TAP PAUSE TO RESUME"
 			_lbl_hint.visible = true
 		else:
 			_lbl_hint.text = "TAP ARM TO FLY"
-			_lbl_hint.visible = not _drone.armed and not _drone.is_crashed
+			_lbl_hint.visible = not _drone.armed and not _drone.is_crashed and not _drone.is_destroyed
 	# Throttle bar + label menampilkan STICK throttle (perintah pilot,
 	# 0..100%), bukan effective — agar sejajar dengan marker HOVER di
 	# 38% (posisi stick saat hover). Layar sentuh tidak memberi rasa
@@ -193,27 +211,39 @@ func _fmt_time(t: float) -> String:
 
 func _on_arm_pressed() -> void:
 	if _drone != null:
-		if _drone.is_crashed:
+		if _drone.is_crashed or _drone.is_destroyed:
 			return
 		_drone.set_armed(not _drone.armed)
-		if _drone.armed and _lap_start == 0.0:
-			_lap_start = _elapsed
 
 func _on_mode_pressed() -> void:
 	if _drone != null:
 		_drone.toggle_mode()
 
+## RESET = restart run penuh (sama seperti setelah ledakan): drone ke
+## spawn, dunia di-roll ulang, HUD di-reset. Dijalankan Main agar
+## urutannya benar (drone dulu, baru WarMap).
 func _on_reset_pressed() -> void:
-	if _drone != null:
-		_drone.reset_to_start()
-		_elapsed = 0.0
-		_lap_start = 0.0
-		_gate_count = 0
-		_last_lap = 0.0
+	var parent: Node = get_parent()
+	if parent != null and parent.has_method("restart_run"):
+		parent.call("restart_run")
+	else:
+		reset_run()
+
+## Reset state HUD untuk run baru. Dipanggil Main.restart_run().
+func reset_run() -> void:
+	_elapsed = 0.0
+	_show_destroyed = false
+	if _lbl_hint != null:
+		_lbl_hint.visible = false
 	if _left != null:
 		_left.reset_stick()
 	if _right != null:
 		_right.reset_stick()
+
+## Toggle warhead RPG: drone jadi / berhenti jadi senjata kamikaze.
+func _on_rpg_pressed() -> void:
+	if _drone != null and not _drone.is_destroyed:
+		_drone.set_rpg_mounted(not _drone.rpg_mounted)
 
 func _on_cam_up() -> void:
 	if _camera != null:
@@ -255,19 +285,16 @@ func _on_mute_pressed() -> void:
 			cur = bool(_audio.get("muted"))
 		_audio.call("set_muted", not cur)
 
-func _on_gate_passed(gate_index: int) -> void:
-	_gate_count += 1
-	if _audio != null and _audio.has_method("play_gate_beep"):
-		_audio.call("play_gate_beep")
-	# Lap selesai saat melewati gate 0 setelah minimal 2 gate lain.
-	if gate_index == 0 and _gate_count > 2:
-		var lap: float = _elapsed - _lap_start
-		if lap > 3.0:
-			_last_lap = lap
-			if _best_lap == 0.0 or lap < _best_lap:
-				_best_lap = lap
-			_lap_start = _elapsed
-
 func _on_drone_crashed() -> void:
 	if _lbl_hint != null:
 		_lbl_hint.visible = false
+
+## Ledakan kamikaze: tampilkan pesan 2 detik (Main restart setelahnya).
+func _on_drone_destroyed(kills: int) -> void:
+	_show_destroyed = true
+	if _lbl_hint != null:
+		if kills > 0:
+			_lbl_hint.text = "KAMIKAZE! +%d KILLS" % kills
+		else:
+			_lbl_hint.text = "DRONE DESTROYED"
+		_lbl_hint.visible = true

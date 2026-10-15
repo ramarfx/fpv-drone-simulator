@@ -81,7 +81,10 @@ keytool -genkeypair -keystore debug.keystore -alias androiddebugkey \
 
 - Android: stik kiri = throttle (vertikal, stays) + yaw (horizontal).
   Stik kanan = pitch + roll (spring ke tengah). Tombol ARM / ACRO-ANGLE /
-  RESET / CAM +/− / PAUSE / MUTE.
+  RESET / RPG / CAM +/− / PAUSE / MUTE.
+- **War Mode (BUILD 10):** tombol RPG pasang/lepas warhead kamikaze.
+  Terbang ke prajurit/tank dengan RPG terpasang → ledakan + kill counter.
+  Tanpa RPG, tabrakan hanya crash biasa. Mob tidak menembak.
 - Keyboard: W/S pitch, A/D roll, Panah Atas/Bawah throttle,
   Panah Kiri/Kanan yaw, Spasi arm, R reset, M mode.
 - Gamepad: sumbu standar (jika terdeteksi OS).
@@ -90,8 +93,9 @@ keytool -genkeypair -keystore debug.keystore -alias androiddebugkey \
 
 ```
 project.godot  export_presets.cfg  icon.svg
-scenes/  Main.tscn  Drone.tscn  Map.tscn  HUD.tscn
+scenes/  Main.tscn  Drone.tscn  HUD.tscn
 scripts/ drone_physics.gd  flight_controller.gd  fpv_camera.gd
-         fpv_audio.gd  joystick.gd  hud.gd  gate.gd  main.gd
+         fpv_audio.gd  joystick.gd  hud.gd  main.gd
+         war_map.gd  mob.gd  explosion.gd
 README.md  README_PHYSICS.md  README_BUILD.md
 ```
