@@ -60,7 +60,7 @@ func start(pos: Vector3, radius: float) -> void:
 		bm.size = Vector3(s, s, s)
 		d.mesh = bm
 		var dm: StandardMaterial3D = StandardMaterial3D.new()
-		dm.albedo_color = Color(0.15, 0.12, 0.1, 1)
+		dm.albedo_color = Color(0.32, 0.28, 0.25, 1)
 		d.set_surface_override_material(0, dm)
 		add_child(d)
 		_debris.append(d)

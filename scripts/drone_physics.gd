@@ -107,7 +107,7 @@ func _ready() -> void:
 	tube_mesh.height = 0.7
 	_rpg_tube.mesh = tube_mesh
 	var tube_mat: StandardMaterial3D = StandardMaterial3D.new()
-	tube_mat.albedo_color = Color(0.15, 0.25, 0.12, 1)
+	tube_mat.albedo_color = Color(0.30, 0.45, 0.22, 1)
 	_rpg_tube.set_surface_override_material(0, tube_mat)
 	_rpg_tube.position = Vector3(0, -0.05, -0.30)
 	_rpg_tube.rotation.x = PI / 2.0

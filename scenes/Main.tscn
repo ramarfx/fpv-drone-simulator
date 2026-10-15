@@ -8,9 +8,10 @@
 [ext_resource type="Script" path="res://scripts/war_map.gd" id="7"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat1"]
-sky_top_color = Color(0.35, 0.38, 0.42, 1)
-sky_horizon_color = Color(0.65, 0.64, 0.60, 1)
-ground_bottom_color = Color(0.30, 0.30, 0.26, 1)
+# Langit lebih terang: ambient berbasis Sky ikut naik, bayangan terisi.
+sky_top_color = Color(0.48, 0.53, 0.62, 1)
+sky_horizon_color = Color(0.78, 0.77, 0.73, 1)
+ground_bottom_color = Color(0.48, 0.46, 0.40, 1)
 
 [sub_resource type="Sky" id="Sky1"]
 sky_material = SubResource("SkyMat1")
@@ -20,11 +21,14 @@ background_mode = 1
 sky = SubResource("Sky1")
 # Tone mapping ACES: highlight tidak clipping putih, bayangan lebih berisi.
 tonemapping_mode = 2
-tonemapping_exposure = 1.0
-# Ambient dari langit: isi bayangan agar tidak hitam pekat (tanpa SSAO
-# yang berat di mobile).
+tonemapping_exposure = 1.1
+# GLOBAL LIGHT (BUILD 11): ambient Sky dinaikkan 0.5 -> 1.2 agar TIDAK
+# ADA permukaan yang hitam pekat — sisi yang membelakangi matahari tetap
+# terlihat jelas. Ditambah lampu Fill dari arah berlawanan (tanpa
+# bayangan, murah di mobile). Bayangan matahari tetap ada (kedalaman
+# terjaga), tapi tidak ada lagi sisi yang gelap gulita.
 ambient_light_source = 2
-ambient_light_energy = 0.5
+ambient_light_energy = 1.2
 fog_enabled = true
 fog_light_color = Color(0.62, 0.62, 0.58, 1)
 fog_density = 0.004
@@ -51,9 +55,18 @@ drone_path = NodePath("../Drone")
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.7071, -0.5, -0.5, 0, 0.7071, -0.7071, 0.7071, 0.5, 0.5, 0, 50, 0)
 light_color = Color(1.0, 0.92, 0.8, 1)
-light_energy = 1.4
+light_energy = 2.0
 shadow_enabled = true
 directional_shadow_mode = 2
+
+# Fill global: cahaya isi dari arah berlawanan matahari (basis = Sun
+# diputar 180° di sumbu Y), TANPA bayangan — mengisi sisi gelap agar
+# tidak ada permukaan yang hitam, dengan biaya 1 directional light lagi.
+[node name="Fill" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.7071, -0.5, 0.5, 0, 0.7071, 0.7071, -0.7071, 0.5, -0.5, 0, 50, 0)
+light_color = Color(0.65, 0.75, 1.0, 1)
+light_energy = 0.6
+shadow_enabled = false
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Env1")

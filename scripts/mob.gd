@@ -81,8 +81,10 @@ func die_by_blast() -> void:
 				if mi.name == "Turret" or mi.name == "Barrel":
 					mi.visible = false
 				else:
+					# Bangkai tetap gelap tapi TIDAK hitam pekat (0.08 -> 0.20)
+					# agar tetap terlihat di bawah global light.
 					var black: StandardMaterial3D = StandardMaterial3D.new()
-					black.albedo_color = Color(0.08, 0.08, 0.08, 1)
+					black.albedo_color = Color(0.20, 0.20, 0.20, 1)
 					mi.set_surface_override_material(0, black)
 		# Bangkai tidak lagi jadi target (tidak bisa diledakkan 2x).
 		collision_layer = 0

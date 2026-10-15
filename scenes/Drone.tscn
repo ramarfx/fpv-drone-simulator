@@ -15,13 +15,14 @@ size = Vector3(0.30, 0.02, 0.05)
 size = Vector3(0.24, 0.005, 0.02)
 
 [sub_resource type="StandardMaterial3D" id="Mat_dark"]
-albedo_color = Color(0.12, 0.12, 0.14, 1)
+# BUILD 11: diangkat dari 0.12 (hampir hitam) agar badan drone terlihat.
+albedo_color = Color(0.35, 0.35, 0.38, 1)
 
 [sub_resource type="StandardMaterial3D" id="Mat_accent"]
 albedo_color = Color(1, 0.35, 0.1, 1)
 
 [sub_resource type="StandardMaterial3D" id="Mat_prop"]
-albedo_color = Color(0.2, 0.2, 0.2, 1)
+albedo_color = Color(0.38, 0.38, 0.38, 1)
 
 [node name="Drone" type="RigidBody3D"]
 script = ExtResource("1")
