@@ -20,7 +20,7 @@ var _paused: bool = false
 
 ## Tag build yang tampil di layar — naikkan tiap build agar jelas APK mana
 ## yang sedang jalan di HP (mencegah "kok tidak ada perubahan" karena APK lama).
-const BUILD_TAG: String = "BUILD 6"
+const BUILD_TAG: String = "BUILD 7"
 
 # Referensi UI (diisi di _ready via get_node).
 var _btn_pause: Button
@@ -228,6 +228,15 @@ func _toggle_pause() -> void:
 	get_tree().paused = _paused
 	if _btn_pause != null:
 		_btn_pause.text = "RESUME" if _paused else "PAUSE"
+	# Pasang indikator PAUSED langsung di sini, bukan hanya di _process:
+	# saat pause, _process HUD tidak selalu jalan, jadi kalau indikator
+	# hanya di _process, pause jadi tidak terlihat dan dikira joystick mati
+	# (itulah yang bikin "tadi bisa, terus gabisa" — kepencet PAUSE tanpa
+	# sadar, tanpa ada tulisan PAUSED). Saat resume, _process mengambil
+	# alih lagi dan mengembalikan hint normal.
+	if _paused and _lbl_hint != null:
+		_lbl_hint.text = "PAUSED — TAP PAUSE TO RESUME"
+		_lbl_hint.visible = true
 
 func _on_mute_pressed() -> void:
 	if _audio != null and _audio.has_method("set_muted"):
