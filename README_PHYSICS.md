@@ -100,8 +100,15 @@ FL = thr + pitch + roll − yaw
 RR = thr − pitch − roll − yaw
 RL = thr − pitch + roll + yaw
 ```
-Jika ada motor jenuh (>1), kontribusi pitch/roll diskala turun agar
-yaw tetap punya otoritas. Airmode: PID selalu aktif walau throttle 0.
+Diferensial diskala (faktor s ≤ 1, sama untuk keempat motor) agar semua
+motor tetap di [0,1] — jumlah keempat motor SELALU = 4×throttle, jadi
+net thrust tidak pernah berubah oleh PID. Tanpa ini, clamp motor
+negatif ke 0 menambah net thrust (motor −1 → 0) dan drone naik sendiri
+walau throttle 0 — itulah bug BUILD 8 ("naik terus, suara motor max"),
+diperbaiki di BUILD 9. Konsekuensi yang benar secara fisik: di throttle
+0 tidak ada otoritas attitude (semua motor 0, drone jatuh tanpa kontrol),
+sama seperti quad asli. Airmode: PID selalu aktif walau throttle 0
+(kecuali saat crash/disarm).
 
 Mode ANGLE: lihat §4 (default, max tilt 50°, P=8.0, ±360 °/s).
 

@@ -20,7 +20,7 @@ var _paused: bool = false
 
 ## Tag build yang tampil di layar — naikkan tiap build agar jelas APK mana
 ## yang sedang jalan di HP (mencegah "kok tidak ada perubahan" karena APK lama).
-const BUILD_TAG: String = "BUILD 8"
+const BUILD_TAG: String = "BUILD 9"
 
 # Referensi UI (diisi di _ready via get_node).
 var _btn_pause: Button
@@ -177,6 +177,7 @@ func _process(delta: float) -> void:
 		_bar_throttle.value = thr * 100.0
 	if _lbl_thr != null:
 		_lbl_thr.text = "THR %d%%" % int(thr * 100.0)
+
 	if _bar_batt != null:
 		_bar_batt.value = _drone.battery_charge * 100.0
 	# Horizon mini: rotasi dari roll drone, offset dari pitch.

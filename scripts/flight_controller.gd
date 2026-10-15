@@ -94,23 +94,30 @@ class PIDAxis:
 ## yaw>0 = torque +Y (motor FR+RL +).
 ## Jika ada motor jenuh (>1), skala kontribusi pitch/roll agar yaw tetap punya otoritas.
 static func mix_motors(throttle: float, pitch_n: float, roll_n: float, yaw_n: float) -> Array[float]:
-	var p: float = pitch_n
-	var r: float = roll_n
-	# Cek saturasi, skala pitch/roll saja (yaw dipertahankan).
-	for _i in range(2):
-		var m0: float = throttle + p - r + yaw_n
-		var m1: float = throttle + p + r - yaw_n
-		var m2: float = throttle - p - r - yaw_n
-		var m3: float = throttle - p + r + yaw_n
-		var mx: float = maxf(maxf(m0, m1), maxf(m2, m3))
-		if mx <= 1.0:
-			break
-		var scale: float = 0.9 / mx
-		p *= scale
-		r *= scale
+	# Diferensial (jumlah nol): redistribusi thrust untuk attitude, TANPA
+	# mengubah net thrust. Skala diferensial agar semua motor tetap [0,1].
+	# INI PERBAIKAN BUG "naik terus padahal throttle 0": versi lama hanya
+	# menangani saturasi ATAS (skala pitch/roll), lalu CLAMP motor negatif
+	# ke 0 — clamp itu MENAMBAH net thrust (motor -1 -> 0), sehingga saat
+	# PID jenuh (drone miring), thrust bersih > perintah throttle dan drone
+	# naik sendiri walau throttle 0, suara motor tetap kencang.
+	# Di sini jumlah keempat motor SELALU = 4*throttle: throttle 0 ->
+	# semua motor 0 (jatuh, bukan naik); throttle hover -> net = hover.
+	# Saat tidak jenuh (s=1), hasil IDENTIK dengan versi lama.
+	var d0: float = pitch_n - roll_n + yaw_n
+	var d1: float = pitch_n + roll_n - yaw_n
+	var d2: float = -pitch_n - roll_n - yaw_n
+	var d3: float = -pitch_n + roll_n + yaw_n
+	var s: float = 1.0
+	for d in [d0, d1, d2, d3]:
+		if d > 0.0:
+			s = minf(s, (1.0 - throttle) / d)
+		elif d < 0.0:
+			s = minf(s, throttle / -d)
+	s = clampf(s, 0.0, 1.0)
 	var out: Array[float] = []
-	out.append(clampf(throttle + p - r + yaw_n, 0.0, 1.0))
-	out.append(clampf(throttle + p + r - yaw_n, 0.0, 1.0))
-	out.append(clampf(throttle - p - r - yaw_n, 0.0, 1.0))
-	out.append(clampf(throttle - p + r + yaw_n, 0.0, 1.0))
+	out.append(throttle + s * d0)
+	out.append(throttle + s * d1)
+	out.append(throttle + s * d2)
+	out.append(throttle + s * d3)
 	return out
