@@ -1,0 +1,84 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://scripts/drone_physics.gd" id="1"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(0.32, 0.08, 0.32)
+
+[sub_resource type="BoxMesh" id="BoxMesh_body"]
+size = Vector3(0.28, 0.05, 0.28)
+
+[sub_resource type="BoxMesh" id="BoxMesh_arm"]
+size = Vector3(0.30, 0.02, 0.05)
+
+[sub_resource type="BoxMesh" id="BoxMesh_prop"]
+size = Vector3(0.24, 0.005, 0.02)
+
+[sub_resource type="StandardMaterial3D" id="Mat_dark"]
+albedo_color = Color(0.12, 0.12, 0.14, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_accent"]
+albedo_color = Color(1, 0.35, 0.1, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_prop"]
+albedo_color = Color(0.2, 0.2, 0.2, 1)
+
+[node name="Drone" type="RigidBody3D"]
+script = ExtResource("1")
+collision_layer = 2
+collision_mask = 1
+mass = 0.65
+gravity_scale = 1.0
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_body")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_body")
+surface_material_override/0 = SubResource("Mat_dark")
+
+[node name="ArmFL" type="MeshInstance3D" parent="."]
+transform = Transform3D(-0.7071, 0, -0.7071, 0, 1, 0, 0.7071, 0, -0.7071, -0.08, 0, -0.08)
+mesh = SubResource("BoxMesh_arm")
+surface_material_override/0 = SubResource("Mat_dark")
+
+[node name="ArmFR" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.7071, 0, -0.7071, 0, 1, 0, 0.7071, 0, 0.7071, 0.08, 0, -0.08)
+mesh = SubResource("BoxMesh_arm")
+surface_material_override/0 = SubResource("Mat_dark")
+
+[node name="ArmRL" type="MeshInstance3D" parent="."]
+transform = Transform3D(-0.7071, 0, 0.7071, 0, 1, 0, -0.7071, 0, -0.7071, -0.08, 0, 0.08)
+mesh = SubResource("BoxMesh_arm")
+surface_material_override/0 = SubResource("Mat_dark")
+
+[node name="ArmRR" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.7071, 0, 0.7071, 0, 1, 0, -0.7071, 0, 0.7071, 0.08, 0, 0.08)
+mesh = SubResource("BoxMesh_arm")
+surface_material_override/0 = SubResource("Mat_dark")
+
+[node name="TopPlate" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
+mesh = SubResource("BoxMesh_body")
+surface_material_override/0 = SubResource("Mat_accent")
+
+[node name="Prop0" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.115, 0.04, -0.115)
+mesh = SubResource("BoxMesh_prop")
+surface_material_override/0 = SubResource("Mat_prop")
+
+[node name="Prop1" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.115, 0.04, -0.115)
+mesh = SubResource("BoxMesh_prop")
+surface_material_override/0 = SubResource("Mat_prop")
+
+[node name="Prop2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.115, 0.04, 0.115)
+mesh = SubResource("BoxMesh_prop")
+surface_material_override/0 = SubResource("Mat_prop")
+
+[node name="Prop3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.115, 0.04, 0.115)
+mesh = SubResource("BoxMesh_prop")
+surface_material_override/0 = SubResource("Mat_prop")

@@ -1,0 +1,15 @@
+# Godot import cache / editor state
+.godot/
+
+# Build output (APK) and manual-builder scratch dirs
+builds/
+tmp-apkbuild5/
+tmp-*/
+
+# Godot export artifacts
+*.pck
+
+# Debug keystore (private key material — regenerate on a fresh clone,
+# see README_BUILD.md). Local builds keep working; the file itself is
+# never committed.
+debug.keystore
