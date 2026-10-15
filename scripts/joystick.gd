@@ -3,6 +3,15 @@ extends Control
 ## Kiri (Mode 2): vertikal = throttle (0..1, TIDAK spring — stays where left),
 ##   horizontal = yaw. Kanan: pitch + roll, spring ke tengah.
 ## Mendukung sentuhan + mouse (fallback desktop).
+##
+## ATURAN KOORDINAT (penting!): posisi event di _gui_input SUDAH dalam
+## koordinat LOKAL control ini — engine mentransformasi event ke ruang lokal
+## sebelum memanggil _gui_input (lihat Viewport::_gui_input_event:
+## pos = over->get_global_transform_with_canvas().affine_inverse().xform(pos)).
+## Jadi JANGAN bandingkan event.position dengan get_global_rect() (ruang
+## global/canvas) — has_point() akan selalu FALSE dan stick tidak pernah
+## mengklaim sentuhan. Pakai Rect2(Vector2.ZERO, size) untuk hit-test dan
+## langsung kurangi _center untuk drag.
 
 class_name VirtualJoystick
 
@@ -22,15 +31,22 @@ func _ready() -> void:
 	_center = size / 2.0
 	_knob_pos = _center
 	# Buat visual base + knob via kode (tidak butuh scene terpisah).
+	# PENTING: visual base/knob HARUS IGNORE. _gui_find_control_at_pos
+	# mengembalikan Control TERDALAM di bawah sentuhan, dan STOP menghentikan
+	# rantai propagasi — jadi kalau base/knob (ColorRect, default STOP)
+	# dibiarkan, merekalah yang menerima sentuhan dan joystick (parent)
+	# tidak pernah melihatnya. IGNORE membuat pencarian tembus ke joystick.
 	_base = ColorRect.new()
 	_base.color = Color(1, 1, 1, 0.18)
 	_base.size = Vector2(radius * 2.0, radius * 2.0)
 	_base.position = _center - _base.size / 2.0
+	_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_base)
 	_knob = ColorRect.new()
 	_knob.color = Color(1, 1, 1, 0.85)
 	_knob.size = Vector2(radius * 0.9, radius * 0.9)
 	_knob.position = _center - _knob.size / 2.0
+	_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_knob)
 	# Throttle kiri mulai di bawah (0).
 	if is_left_stick:
@@ -52,7 +68,9 @@ func _gui_input(event: InputEvent) -> void:
 		# baru tetap bisa merebut stick — stick tidak mati selamanya.
 		if touch.pressed:
 			# Hanya terima sentuhan yang mulai di dalam joystick ini.
-			if get_global_rect().has_point(touch.position):
+			# touch.position di _gui_input adalah LOKAL — uji terhadap
+			# rect lokal (0,0)-(size), BUKAN get_global_rect().
+			if Rect2(Vector2.ZERO, size).has_point(touch.position):
 				_touch_id = touch.index
 				_handle_drag(touch.position)
 				accept_event()
@@ -69,7 +87,8 @@ func _gui_input(event: InputEvent) -> void:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed and _touch_id == -1:
-				if get_global_rect().has_point(mb.position):
+				# mb.position di _gui_input juga LOKAL — uji rect lokal.
+				if Rect2(Vector2.ZERO, size).has_point(mb.position):
 					_touch_id = 1000
 					_handle_drag(mb.position)
 					accept_event()
@@ -83,8 +102,9 @@ func _gui_input(event: InputEvent) -> void:
 			_handle_drag(mm.position)
 			accept_event()
 
-func _handle_drag(global_pos: Vector2) -> void:
-	var local: Vector2 = global_pos - global_position - _center
+## local_pos = posisi event dari _gui_input (sudah LOKAL, bukan global).
+func _handle_drag(local_pos: Vector2) -> void:
+	var local: Vector2 = local_pos - _center
 	# Jepit ke lingkaran radius.
 	if local.length() > radius:
 		local = local.normalized() * radius
