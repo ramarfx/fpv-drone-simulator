@@ -4,23 +4,46 @@ class_name FlightController
 ## Dipakai oleh drone_physics.gd. Semua satuan SI, sudut dalam radian.
 ##
 ## Actual Rates (Betaflight) — pendekatan yang dipakai di sini:
-##   rate = stick * max_rate * ((1 - expo) + expo * stick^2)  dengan center scaling.
-## Nilai default: center=1.0, max=800 deg/s, expo=0.70.
-## Ini memberi resolusi halus di tengah (presisi) dan agresif di ujung (flip/roll).
+##   rate = stick * (center + (max - center) * stick^2)
+##   -> slope di tengah = center (°/s per unit stick), di ujung = max.
+## Preset Beginner (mobile, dari riset 2026-10-15): center=50, max=500, expo=0.
+## (ACRO lama: center=1.0-ish, max=800, expo=0.70 — terlalu liar untuk
+##  layar sentuh: geser dikit langsung nge-flip.)
+##
+## Throttle (Betaflight throttle_limit SCALE + thr_expo):
+##   motor_cmd = THR_LIMIT * (stick*(1-expo) + stick^3*expo)
+##   Hover pindah dari stick ~16% (TWR 6.2 tanpa limit) ke ~38%:
+##   ada travel stick yang cukup DI BAWAH hover untuk turun dengan halus,
+##   dan punch-out dibatasi 60% sehingga tidak langsung melesat.
 
-const MAX_RATE_DEG: float = 800.0
-const CENTER: float = 1.0
-const EXPO: float = 0.70
+const MAX_RATE_DEG: float = 500.0
+const CENTER: float = 50.0
+const EXPO: float = 0.0
+
+const THR_EXPO: float = 0.35
+const THR_LIMIT: float = 0.60
+## Posisi stick throttle saat hover (baterai penuh, di luar ground effect).
+## Hover motor cmd = berat / thrust maks = 0.65*9.81 / 40 = 0.159;
+## dengan limit 0.60 + expo 0.35 -> stick ~0.38. Dipakai HUD untuk
+## marker HOVER pada throttle bar.
+const HOVER_STICK: float = 0.38
 
 ## Konversi stick [-1,1] -> laju sudut radian/detik (Actual Rates).
 static func actual_rates(stick: float) -> float:
 	var s: float = clampf(stick, -1.0, 1.0)
 	var max_rad: float = deg_to_rad(MAX_RATE_DEG)
-	# Center: sensitivitas di tengah. Expo: kurva.
-	var curve: float = (1.0 - EXPO) + EXPO * s * s
-	# Faktor center memperhalus area tengah tanpa mengubah ujung.
-	var rate: float = s * max_rad * curve * CENTER
+	var center_rad: float = deg_to_rad(CENTER)
+	# Actual Rates Betaflight: center = slope di tengah, max = ujung.
+	var rate: float = s * (center_rad + (max_rad - center_rad) * s * s)
+	# Expo tambahan (0 = mati; >0 melembutkan tengah lagi).
+	rate *= (1.0 - EXPO) + EXPO * s * s
 	return rate
+
+## Throttle stick (0..1) -> perintah motor (0..1): expo kubik lalu limit SCALE.
+static func apply_throttle(stick: float) -> float:
+	var t: float = clampf(stick, 0.0, 1.0)
+	var curved: float = t * (1.0 - THR_EXPO) + t * t * t * THR_EXPO
+	return curved * THR_LIMIT
 
 ## PID untuk angular velocity, satu sumbu.
 ## state disimpan per-sumbu di drone (integral, prev_error, d_filtered).

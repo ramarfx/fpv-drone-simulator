@@ -20,8 +20,8 @@ enum FlightMode { ACRO, ANGLE }
 @export var arm_length: float = 0.115 # m, jarak pusat -> motor
 @export var motor_tau: float = 0.03 # s, lag motor orde-1
 @export var battery_capacity_mah: float = 1500.0
-@export var flight_mode: FlightMode = FlightMode.ACRO
-@export var max_tilt_angle_deg: float = 35.0 # mode ANGLE
+@export var flight_mode: FlightMode = FlightMode.ANGLE
+@export var max_tilt_angle_deg: float = 50.0 # mode ANGLE
 
 # Input dari joystick / keyboard (diisi tiap frame oleh _process).
 var throttle_input: float = 0.0 # 0..1
@@ -121,10 +121,13 @@ func reset_to_start() -> void:
 		motor_cmd[i] = 0.0
 		motor_filtered[i] = 0.0
 		rpm[i] = 0.0
-	# Reset state fisika langsung.
+	# Reset state fisika langsung. Rotasi DIPAKSA tegak (Basis.IDENTITY):
+	# reset harus mengembalikan drone yang kebalik ke posisi datar, bukan
+	# mengembalikan transform apa adanya.
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
-	global_transform = _start_transform
+	throttle_input = 0.0
+	global_transform = Transform3D(Basis.IDENTITY, _start_transform.origin)
 	# Bangunkan body agar tidak tidur.
 	sleeping = false
 
@@ -235,7 +238,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var pitch_n: float = tau_x / MAX_TORQUE_XZ
 		var yaw_n: float = tau_y / MAX_TORQUE_Y
 		var roll_n: float = tau_z / MAX_TORQUE_XZ
-		var mixed: Array[float] = FlightController.mix_motors(throttle_input, pitch_n, roll_n, yaw_n)
+		# Throttle stick -> motor cmd lewat kurva expo + limit SCALE
+		# (hover di stick ~38%, punch-out dibatasi 60%).
+		var thr_eff: float = FlightController.apply_throttle(throttle_input)
+		var mixed: Array[float] = FlightController.mix_motors(thr_eff, pitch_n, roll_n, yaw_n)
 		for i in range(4):
 			motor_cmd[i] = mixed[i]
 		# Terapkan torque PID + angular drag.
@@ -309,7 +315,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 ## Mode ANGLE: hitung desired omega dari error sudut.
 func _angle_mode_omega(basis: Basis) -> Vector3:
-	# Tilt yang diminta: pitch & roll dari stick, maks 35 derajat.
+	# Tilt yang diminta: pitch & roll dari stick, maks 50 derajat.
 	var desired_pitch: float = -pitch_input * deg_to_rad(max_tilt_angle_deg)
 	var desired_roll: float = -roll_input * deg_to_rad(max_tilt_angle_deg)
 	# Estimasi pitch/roll saat ini dari basis: proyeksi sumbu up.
@@ -318,8 +324,9 @@ func _angle_mode_omega(basis: Basis) -> Vector3:
 	# e.x = pitch, e.z = roll (urutan YXZ di Godot, pendekatan cukup untuk self-level).
 	var err_pitch: float = desired_pitch - e.x
 	var err_roll: float = desired_roll - e.z
-	var kp_angle: float = 6.0
-	var max_rate: float = deg_to_rad(300.0)
+	# P kuat agar snap-back ke level terasa tegas saat stick dilepas.
+	var kp_angle: float = 8.0
+	var max_rate: float = deg_to_rad(360.0)
 	return Vector3(
 		clampf(kp_angle * err_pitch, -max_rate, max_rate),
 		0.0,

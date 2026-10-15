@@ -1,56 +1,34 @@
 extends Camera3D
-## Kamera FPV — follow drone dengan lag + shake, tanpa stabilisasi gimbal.
-## Uptilt 15-30 derajat (default 25), FOV 115.
+## Kamera FPV — RIGID MOUNT, 1:1 dengan frame drone.
+## Kamera FPV asli dibaut ke frame dengan sudut up-tilt tetap: tidak ada
+## gimbal, stabilisasi, smoothing, atau lerp. Kalau drone roll, horizon
+## roll persis sama; kalau pitch, view pitch persis sama. Kamera di sini
+## menyalin transform drone persis tiap frame (offset + up-tilt tetap
+## dalam frame drone). Smoothing lama (lerp posisi + slerp rotasi) yang
+## bikin kamera terasa "tidak nempel" sudah dihapus.
+## Uptilt 20 derajat (beginner), FOV vertikal 80 — Godot fov adalah
+## VERTIKAL, jangan salin angka diagonal hardware 150° mentah-mentah
+## (itu ~75-90° vertikal di layar 16:9).
 
 @export var drone_path: NodePath
-@export var uptilt_deg: float = 25.0
-@export var fov_deg: float = 115.0
-@export var follow_lerp_hz: float = 12.0
-@export var shake_amount: float = 0.004
+@export var uptilt_deg: float = 20.0
+@export var fov_deg: float = 80.0
 
 var _drone: Node3D
-var _smooth_pos: Vector3
-var _smooth_basis: Basis
-var _initialized: bool = false
 
 func _ready() -> void:
 	fov = fov_deg
 	if drone_path != NodePath(""):
 		_drone = get_node_or_null(drone_path) as Node3D
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if _drone == null:
 		return
-	var target: Transform3D = _drone.global_transform
-	# Offset kamera sedikit di depan + atas body.
-	var cam_offset: Vector3 = target.basis * Vector3(0, 0.06, -0.10)
-	var target_pos: Vector3 = target.origin + cam_offset
-	if not _initialized:
-		_smooth_pos = target_pos
-		_smooth_basis = target.basis
-		_initialized = true
-	var a: float = 1.0 - exp(-follow_lerp_hz * delta)
-	_smooth_pos = _smooth_pos.lerp(target_pos, a)
-	# Slerp rotasi: pakai Quaternion.
-	var q_cur: Quaternion = Quaternion(_smooth_basis)
-	var q_tgt: Quaternion = Quaternion(target.basis)
-	_smooth_basis = Basis(q_cur.slerp(q_tgt, a))
-	# Uptilt: putar kamera ke atas sebesar uptilt di sekitar sumbu X lokal.
+	# Salin transform drone persis: posisi = origin drone + offset dalam
+	# frame drone, rotasi = basis drone * up-tilt. Tanpa lerp/slerp/shake.
+	var drone_t: Transform3D = _drone.global_transform
 	var uptilt_basis: Basis = Basis(Vector3(1, 0, 0), deg_to_rad(uptilt_deg))
-	var final_basis: Basis = _smooth_basis * uptilt_basis
-	global_position = _smooth_pos
-	global_transform = Transform3D(final_basis, _smooth_pos)
-	# Shake proporsional throttle + kecepatan (vibrasi motor).
-	var drone_script = _drone as FPVDrone
-	if drone_script != null:
-		var thr: float = drone_script.effective_throttle
-		var t: float = Time.get_ticks_msec() / 1000.0
-		var shake: float = shake_amount * (0.3 + thr)
-		# Tambah noise kecil pada posisi (dalam frame kamera).
-		var off: Vector3 = Vector3(
-			sin(t * 47.0) * shake,
-			sin(t * 53.0 + 1.3) * shake,
-			0.0
-		)
-		global_position += final_basis * off
+	var cam_offset: Vector3 = Vector3(0, 0.06, -0.10)
+	var local_t: Transform3D = Transform3D(uptilt_basis, cam_offset)
+	global_transform = drone_t * local_t
 	fov = fov_deg

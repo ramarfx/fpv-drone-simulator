@@ -22,6 +22,7 @@ renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"
 textures/default_texture_filter=0
 environment/defaults/default_clear_color=Color(0.529, 0.808, 0.922, 1)
+lights_and_shadows/directional_shadow/size=2048
 
 [physics]
 common/physics_ticks_per_second=240

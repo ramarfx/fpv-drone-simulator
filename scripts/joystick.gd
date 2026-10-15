@@ -18,6 +18,13 @@ class_name VirtualJoystick
 @export var is_left_stick: bool = true
 @export var radius: float = 70.0
 
+## Deadzone radial 0.10 (10% radius) untuk pitch/roll/yaw, dengan rescale
+## sisa travel ke 0..1 — diagonal tidak jadi kotak. Perbaiki getaran jari
+## di tengah tanpa membuat tengah terasa mati. TIDAK dipakai pada sumbu
+## throttle: deadzone di throttle membuat hunting ketinggian di sekitar
+## hover makin parah; presisi hover diatur throttle expo.
+const DEADZONE: float = 0.10
+
 signal stick_changed(value: Vector2)
 
 var value: Vector2 = Vector2.ZERO # x: -1..1 (yaw / roll), y: -1..1 (throttle / pitch)
@@ -102,25 +109,48 @@ func _gui_input(event: InputEvent) -> void:
 			_handle_drag(mm.position)
 			accept_event()
 
+## Deadzone 1D dengan rescale (untuk yaw): |v| < dz -> 0, sisanya
+## dipetakan ulang ke 0..1 agar stick penuh tetap memberi perintah penuh.
+func _deadzone_1d(v: float) -> float:
+	if absf(v) < DEADZONE:
+		return 0.0
+	return signf(v) * (absf(v) - DEADZONE) / (1.0 - DEADZONE)
+
+## Deadzone RADIAL (melingkar) dengan rescale (untuk pitch+roll):
+## arah dipertahankan, jadi diagonal tidak terdistorsi jadi kotak.
+func _deadzone_2d(v: Vector2) -> Vector2:
+	var l: float = v.length()
+	if l < DEADZONE:
+		return Vector2.ZERO
+	if l >= 1.0:
+		return v.normalized()
+	return v.normalized() * ((l - DEADZONE) / (1.0 - DEADZONE))
+
 ## local_pos = posisi event dari _gui_input (sudah LOKAL, bukan global).
 func _handle_drag(local_pos: Vector2) -> void:
 	var local: Vector2 = local_pos - _center
 	# Jepit ke lingkaran radius.
 	if local.length() > radius:
 		local = local.normalized() * radius
+	# Knob menampilkan posisi jari mentah (tanpa deadzone) — yang
+	# di-deadzone hanya nilai perintah yang dikirim ke drone.
 	_knob_pos = _center + local
 	if is_left_stick:
 		# Kiri: x = yaw (-1 kiri, +1 kanan), y = throttle (atas=1, bawah=0).
 		# Di layar, y ke bawah positif, jadi throttle = 1 - (local.y/radius+1)/2.
-		var yaw: float = clampf(local.x / radius, -1.0, 1.0)
+		# Deadzone hanya pada yaw; throttle tanpa deadzone.
+		var yaw: float = _deadzone_1d(clampf(local.x / radius, -1.0, 1.0))
 		var thr: float = clampf(1.0 - ((local.y / radius) + 1.0) / 2.0, 0.0, 1.0)
 		value = Vector2(yaw, thr)
 	else:
 		# Kanan: x = roll (kanan=+1), y = pitch (stick atas = pitch maju = +1).
 		# Layar y bawah positif -> pitch = -local.y/radius.
-		var roll: float = clampf(local.x / radius, -1.0, 1.0)
-		var pitch: float = clampf(-local.y / radius, -1.0, 1.0)
-		value = Vector2(roll, pitch)
+		# Deadzone radial pada pasangan (roll, pitch).
+		var raw: Vector2 = Vector2(
+			clampf(local.x / radius, -1.0, 1.0),
+			clampf(-local.y / radius, -1.0, 1.0)
+		)
+		value = _deadzone_2d(raw)
 	_update_knob()
 	stick_changed.emit(value)
 

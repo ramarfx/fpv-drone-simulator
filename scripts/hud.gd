@@ -20,7 +20,7 @@ var _paused: bool = false
 
 ## Tag build yang tampil di layar — naikkan tiap build agar jelas APK mana
 ## yang sedang jalan di HP (mencegah "kok tidak ada perubahan" karena APK lama).
-const BUILD_TAG: String = "BUILD 7"
+const BUILD_TAG: String = "BUILD 8"
 
 # Referensi UI (diisi di _ready via get_node).
 var _btn_pause: Button
@@ -33,6 +33,7 @@ var _lbl_mode: Label
 var _lbl_arm: Label
 var _lbl_gate: Label
 var _lbl_hint: Label
+var _lbl_thr: Label
 var _bar_throttle: ProgressBar
 var _bar_batt: ProgressBar
 var _horizon: ColorRect
@@ -54,6 +55,7 @@ func _ready() -> void:
 	_lbl_arm = get_node_or_null("TopBar/ArmState") as Label
 	_lbl_gate = get_node_or_null("TopBar/Gates") as Label
 	_lbl_hint = get_node_or_null("Hint") as Label
+	_lbl_thr = get_node_or_null("ThrottlePct") as Label
 	_lbl_debug = get_node_or_null("DebugLabel") as Label
 	if _lbl_debug != null:
 		_lbl_debug.text = BUILD_TAG
@@ -158,7 +160,7 @@ func _process(delta: float) -> void:
 			_lbl_arm.text = "DISARMED"
 			_lbl_arm.modulate = Color(1, 1, 1)
 	if _lbl_gate != null:
-		_lbl_gate.text = "GATE %d/8  LAP %s" % [_gate_count, _fmt_time(_last_lap) if _last_lap > 0.0 else "--:--"]
+		_lbl_gate.text = "GATE %d/12  LAP %s" % [_gate_count, _fmt_time(_last_lap) if _last_lap > 0.0 else "--:--"]
 	if _lbl_hint != null:
 		if get_tree().paused:
 			_lbl_hint.text = "PAUSED — TAP PAUSE TO RESUME"
@@ -166,8 +168,15 @@ func _process(delta: float) -> void:
 		else:
 			_lbl_hint.text = "TAP ARM TO FLY"
 			_lbl_hint.visible = not _drone.armed and not _drone.is_crashed
+	# Throttle bar + label menampilkan STICK throttle (perintah pilot,
+	# 0..100%), bukan effective — agar sejajar dengan marker HOVER di
+	# 38% (posisi stick saat hover). Layar sentuh tidak memberi rasa
+	# posisi throttle seperti radio asli, jadi angka + marker ini yang
+	# menggantikannya: di bawah marker = turun, di atas marker = naik.
 	if _bar_throttle != null:
-		_bar_throttle.value = _drone.effective_throttle * 100.0
+		_bar_throttle.value = thr * 100.0
+	if _lbl_thr != null:
+		_lbl_thr.text = "THR %d%%" % int(thr * 100.0)
 	if _bar_batt != null:
 		_bar_batt.value = _drone.battery_charge * 100.0
 	# Horizon mini: rotasi dari roll drone, offset dari pitch.

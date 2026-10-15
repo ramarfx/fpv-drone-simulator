@@ -44,11 +44,46 @@ RPM untuk suara/visual: `RPM = √filtered · 28000 · battery_factor`.
 
 Stick → desired angular velocity (Actual Rates Betaflight):
 ```
-rate = stick · 800°/s · ((1−0.70) + 0.70·stick²) · 1.0 (center)
+rate = stick · (center + (max − center) · stick²)
 ```
-- Center 1.0, max 800 °/s, expo 0.70.
+- **Preset Beginner (mobile, BUILD 8): center 50 °/s, max 500 °/s, expo 0.**
+  Center = slope di tengah (koreksi halus), max = ujung (500 °/s ≈ 1.4
+  putaran/detik — cukup untuk belok cepat, tidak langsung nge-flip).
+  Sebelumnya max 800 °/s + expo 0.70 di default ACRO: terlalu liar
+  untuk layar sentuh.
 - Pemetaan sumbu (Godot: X kanan, Y atas, Z belakang):
   `ω_des = (−pitch_rate, −yaw_rate, −roll_rate)`.
+
+### Throttle: expo + limit (Betaflight `thr_expo` + `throttle_limit` SCALE)
+
+```
+motor_cmd = 0.60 · (stick·(1−0.35) + stick³·0.35)
+```
+- `THR_EXPO = 0.35`: melembutkan area sekitar hover (presisi ketinggian).
+- `THR_LIMIT = 0.60` (SCALE): stick penuh → 60% motor. Resolusi stick
+  penuh dipertahankan, tapi punch-out tidak melesat.
+- **Hover di stick ≈ 38%** (bukan ~16% seperti tanpa limit: berat 6.38 N /
+  thrust maks 40 N = 0.159 → dengan limit+expo, stick hover ≈ 0.38).
+  Ada travel stick yang cukup DI BAWAH hover untuk turun dengan halus.
+  HUD menandai titik ini dengan marker kuning "HOVER" + label "THR n%" —
+  layar sentuh tidak memberi rasa posisi throttle seperti radio asli.
+
+### Deadzone stick (layar sentuh)
+
+- Radial (melingkar) **0.10** pada pitch/roll (pasangan 2D) dan yaw (1D),
+  dengan rescale sisa travel ke 0..1 — diagonal tidak terdistorsi.
+- **Tidak ada deadzone pada sumbu throttle** (deadzone di sana membuat
+  hunting ketinggian di sekitar hover makin parah).
+
+### Mode default: ANGLE (self-level)
+
+- Default `flight_mode = ANGLE` (sebelumnya ACRO). Di ANGLE, stick kanan =
+  target tilt, dilepas → drone kembali level sendiri. ACRO tetap tersedia
+  via tombol ACRO/ANGLE (stick = rate, tanpa self-level, bisa flip).
+- Mode ANGLE: desired tilt = stick × **50°**, lalu
+  `ω_des = 8.0 · (tilt_des − tilt_now)` dijepit ±360 °/s. Yaw tetap rate.
+  Cap 50° memberi belok yang responsif tanpa mudah terbalik; P=8.0 membuat
+  snap-back ke level terasa tegas saat stick dilepas.
 
 PID angular-velocity per sumbu:
 ```
@@ -68,8 +103,7 @@ RL = thr − pitch + roll + yaw
 Jika ada motor jenuh (>1), kontribusi pitch/roll diskala turun agar
 yaw tetap punya otoritas. Airmode: PID selalu aktif walau throttle 0.
 
-Mode ANGLE: desired tilt = stick × 35°, lalu
-`ω_des = 6.0 · (tilt_des − tilt_now)` dijepit ±300 °/s. Yaw tetap rate.
+Mode ANGLE: lihat §4 (default, max tilt 50°, P=8.0, ±360 °/s).
 
 ## 5. Gaya aerodinamik
 
@@ -87,19 +121,37 @@ turun hingga 22% dan ditambah guncangan torque sinus kecil.
 Ground effect: dalam 0.5 m di atas tanah, lift ekstra hingga +18%,
 memudar linear ke 0 di 0.5 m.
 
-## 6. Crash
+## 6. Crash & Reset
 
 Crash jika kontak dengan kecepatan > 6 m/s (via `body_entered` +
 cadangan `get_contact_count()` di `_integrate_forces`).
 Saat crash: disarm, motor 0, status CRASHED. Tombol RESET respawn di pad.
+**Reset = instan tegak**: rotasi dipaksa `Basis.IDENTITY`, kecepatan
+linier + angular nol, throttle nol, posisi kembali ke spawn. Tidak ada
+animasi auto-rotate — reset instan adalah standar sim FPV.
 
 ## 7. Kamera
 
-Uptilt default 25° (bisa 15–30° via tombol CAM +/−), FOV 115.
-Follow dengan smoothing 12 Hz (lerp posisi + slerp rotasi) + shake
-proporsional throttle. Tanpa stabilisasi gimbal — murni FPV.
+**Rigid mount 1:1** — kamera menyalin transform drone persis tiap frame
+(offset + up-tilt tetap dalam frame drone). Tanpa lerp/slerp/shake:
+smoothing lama bikin kamera terasa "tidak nempel" dengan drone.
+Uptilt default **20°** (bisa 15–30° via tombol CAM +/−), **FOV vertikal 80°**.
+Catatan: Godot `fov` adalah vertikal — jangan salin angka diagonal
+hardware 150° mentah-mentah (itu ≈ 75–90° vertikal di layar 16:9).
+FOV 115 lama membuat kecepatan sulit dinilai.
 
-## 8. Batasan model
+## 8. Map & Lighting (BUILD 8)
+
+- Map **800×800 m** (dari 400×400): ground + collision diperluas, dinding
+  pembatas tinggi 8 m di ±398, 26 pohon, 10 bangunan, 9 bukit, 4 ramp,
+  2 kolam, 1 bando, **12 gate** (8 lama + 4 di lingkar luar), 12 awan.
+  Tetap low-poly, material flat, tanpa SSAO — hemat di mobile.
+- Lighting: matahari DirectionalLight + shadow (bias 0.02, shadow map
+  2048 via `rendering/lights_and_shadows/directional_shadow/size`),
+  Environment tone mapping **ACES** (exposure 1.05), ambient dari langit
+  (energy 0.45) agar bayangan tidak hitam pekat, fog 0.0025 untuk depth cue.
+
+## 9. Batasan model
 
 - Tanah untuk ground effect diasumsikan y=0 (tidak membaca mesh bukit).
 - Gyro coupling dari integrator engine, bukan persamaan eksplisit.
