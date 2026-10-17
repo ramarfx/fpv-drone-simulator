@@ -22,7 +22,7 @@ var _rpg_btn_state: bool = false
 
 ## Tag build yang tampil di layar — naikkan tiap build agar jelas APK mana
 ## yang sedang jalan di HP (mencegah "kok tidak ada perubahan" karena APK lama).
-const BUILD_TAG: String = "BUILD 11"
+const BUILD_TAG: String = "BUILD 12"
 
 # Referensi UI (diisi di _ready via get_node).
 var _btn_pause: Button
